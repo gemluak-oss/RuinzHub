@@ -3,6 +3,7 @@
     ║        RuinzHub - Anime Ability Arena    ║
     ║         UI: WindUI (FIXED VERSION)       ║
     ║      Tombol Buka UI: Logo / RightCtrl    ║
+    ║         Logo Bisa Digeser (DRAGGABLE)    ║
     ╚══════════════════════════════════════════╝
 ]]
 
@@ -55,11 +56,10 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 -- ============================================
--- LOGO URL (GANTI DI SINI KALAU MAU UBAH LAGI)
+-- LOGO URL
 -- ============================================
 local LOGO_URL = "https://raw.githubusercontent.com/gemluak-oss/icon/refs/heads/main/logo.jpg"
 
--- Fungsi ambil logo dari URL (fallback ke asset lama kalau gagal)
 local function getLogoAsset()
     local success, result = pcall(function()
         return game:HttpGet(LOGO_URL)
@@ -76,7 +76,7 @@ local function getLogoAsset()
             if ok and asset then return asset end
         end
     end
-    return "rbxthumb://type=Asset&id=115542332056889&w=150&h=150" -- fallback
+    return LOGO_URL
 end
 
 local LOGO_ASSET = getLogoAsset()
@@ -267,7 +267,7 @@ local function hookAnimator(anim)
             local name = track.Name and track.Name:lower() or ""
             local aObj = track.Animation
             local aName = aObj and aObj.Name and aObj.Name:lower() or ""
-            if not name:find("dash") and not aName:find("dash") and not name:find("walk") and not aName:find("run") and not name:find("idle") then
+            if not name:find("dash") and not aName:find("dash") and not name:find("walk") and not name:find("run") and not name:find("idle") then
                 activeSkillTrack = track
             end
         end
@@ -1183,6 +1183,7 @@ LogoFrame.Size = UDim2.new(0, 46, 0, 46)
 LogoFrame.Position = UDim2.new(0, 8, 0.5, -23)
 LogoFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
 LogoFrame.BorderSizePixel = 0
+LogoFrame.Active = true
 LogoFrame.Parent = LogoGui
 Instance.new("UICorner", LogoFrame).CornerRadius = UDim.new(0.2, 0)
 
@@ -1211,6 +1212,47 @@ LogoBtn.BackgroundTransparency = 1
 LogoBtn.Text = ""
 LogoBtn.ZIndex = 5
 LogoBtn.Parent = LogoFrame
+
+-- ============================================
+-- 🔥 DRAG LOGO (BISA DIGESER) 🔥
+-- ============================================
+local logoDragMoved = false
+do
+    local dragging = false
+    local dragStart, startPos
+    local activeInput
+
+    LogoFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            logoDragMoved = false
+            dragStart = input.Position
+            startPos = LogoFrame.Position
+            activeInput = input
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    activeInput = nil
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input == activeInput or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            local delta = input.Position - dragStart
+            if delta.Magnitude > 5 then logoDragMoved = true end
+            LogoFrame.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
 
 -- ============================================
 -- FLOAT BUTTONS (Aim & Void)
@@ -1354,16 +1396,13 @@ local uiVisible = true
 local lastToggleTime = 0
 local cachedMainFrame = nil
 
--- Cari frame utama WindUI untuk di-toggle manual
 local function findWindUIFrame()
     if cachedMainFrame and cachedMainFrame.Parent then
         return cachedMainFrame
     end
-    -- Cari di CoreGui
     for _, gui in ipairs(CoreGui:GetChildren()) do
         if gui:IsA("ScreenGui") and (gui.Name:lower():find("wind") or gui.Name:lower():find("ruinz") or gui.Name:lower():find("hub")) then
             for _, obj in ipairs(gui:GetDescendants()) do
-                -- Cari Topbar (frame utama WindUI)
                 if obj:IsA("Frame") and obj.Name == "Topbar" then
                     local main = obj.Parent
                     if main and main:IsA("Frame") then
@@ -1374,7 +1413,6 @@ local function findWindUIFrame()
             end
         end
     end
-    -- Fallback: cari di PlayerGui
     local pGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
     if pGui then
         for _, gui in ipairs(pGui:GetChildren()) do
@@ -1394,14 +1432,12 @@ local function findWindUIFrame()
     return nil
 end
 
--- Fungsi toggle UI
 local function toggleUI()
     local now = tick()
     if now - lastToggleTime < 0.3 then return end
     lastToggleTime = now
     uiVisible = not uiVisible
 
-    -- Coba pakai API WindUI dulu
     local success = false
     pcall(function()
         if Window then
@@ -1421,16 +1457,13 @@ local function toggleUI()
         end
     end)
 
-    -- Fallback: manual toggle frame
     if not success then
         local frame = findWindUIFrame()
         if frame then
             frame.Visible = uiVisible
-            -- Toggle parent juga kalau ada
             if frame.Parent and frame.Parent:IsA("GuiObject") then
                 frame.Parent.Visible = uiVisible
             end
-            -- Toggle semua child utama
             for _, child in ipairs(frame:GetChildren()) do
                 if child:IsA("GuiObject") then
                     child.Visible = uiVisible
@@ -1441,9 +1474,10 @@ local function toggleUI()
 end
 
 -- ============================================
--- FIX: KLIK LOGO = TOGGLE UI
+-- FIX: KLIK LOGO = TOGGLE UI (ANTI-BENTROK DRAG)
 -- ============================================
 local logoClickStart = Vector2.new()
+
 LogoBtn.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         logoClickStart = Vector2.new(input.Position.X, input.Position.Y)
@@ -1453,9 +1487,11 @@ end)
 LogoBtn.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         local dist = (Vector2.new(input.Position.X, input.Position.Y) - logoClickStart).Magnitude
-        if dist < 10 then
+        -- Klik hanya kalau tidak geser (dist < 10) DAN tidak ada drag
+        if dist < 10 and not logoDragMoved then
             toggleUI()
         end
+        logoDragMoved = false
     end
 end)
 
@@ -1689,4 +1725,4 @@ WindUI:Notify({
 })
 
 print("[RuinzHub] WindUI Loaded Successfully (FIXED)!")
-print("[RuinzHub] Klik logo RuinzHub atau tekan RightCtrl/F1 untuk toggle UI")
+print("[RuinzHub] Logo bisa digeser bebas - Klik logo (tap) untuk toggle UI")
